@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}編集 - Modern Expense Tracker{% endblock title %}
+
+{% block content %}
+<div class="container my-4">
+  <div class="frosted-glass p-4">
+    <h2 class="text-center mb-4">出費編集</h2>
+    <form method="post" action="{{ url_for('edit', record_id=record.id) }}">
+      <!-- フィルター維持用の隠しフィールド -->
+      <input type="hidden" name="start_date_hidden" value="{{ start_date }}">
+      <input type="hidden" name="end_date_hidden" value="{{ end_date }}">
+      <input type="hidden" name="year_month_hidden" value="{{ year_month }}">
+      <input type="hidden" name="filter_tag_hidden" value="{{ filter_tag }}">
+      <input type="hidden" name="sort_order_hidden" value="{{ current_sort_order }}">
+      
+      <div class="mb-3">
+        <label for="date" class="form-label">日付 (YYYY-MM-DD)</label>
+        <input type="date" class="form-control" name="date" id="date" value="{{ record.date }}" required>
+      </div>
+      <div class="mb-3">
+        <label for="store" class="form-label">購入店舗</label>
+        <input type="text" class="form-control" name="store" id="store" value="{{ record.store }}" required>
+      </div>
+      <div class="mb-3">
+        <label for="amount" class="form-label">金額</label>
+        <div class="input-group">
+          <input type="text" class="form-control" name="amount" id="amount" value="{{ record.amount }}円" required>
+          <span class="input-group-text">円</span>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label for="tag" class="form-label">タグ</label>
+        <input type="text" class="form-control" name="tag" id="tag" list="tag-list" value="{{ record.tag }}">
+        <datalist id="tag-list">
+          {% for t in unique_tags %}
+          <option value="{{ t }}">
+          {% endfor %}
+          <option value="その他">
+        </datalist>
+      </div>
+      <div class="mb-3">
+        <label for="details" class="form-label">詳細</label>
+        <input type="text" class="form-control" name="details" id="details" value="{{ record.details }}">
+      </div>
+      <div class="d-grid gap-2">
+        <button type="submit" class="btn btn-custom btn-success">更新</button>
+        <a href="{{ url_for('index', start_date=start_date, end_date=end_date, year_month=year_month, filter_tag=filter_tag, sort_order=current_sort_order) }}" class="btn btn-custom btn-outline-light">キャンセル</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock content %}

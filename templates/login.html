@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}ログイン - Modern Expense Tracker{% endblock title %}
+
+{% block content %}
+<div class="d-flex justify-content-center align-items-center" style="height: 80vh;">
+  <div class="frosted-glass p-4" style="max-width: 400px; width: 100%;">
+    <h2 class="text-center mb-4">ログイン</h2>
+    <form method="post">
+      <div class="mb-3">
+        <label for="password" class="form-label">パスワード</label>
+        <input type="password" name="password" id="password" class="form-control" required>
+      </div>
+      <button type="submit" class="btn btn-custom btn-primary w-100">ログイン</button>
+    </form>
+  </div>
+</div>
+{% endblock content %}
