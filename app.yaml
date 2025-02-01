@@ -3,7 +3,7 @@ env: flex
 
 env_variables:
   SECRET_KEY: "YOUR_SECURE_SECRET_KEY"
-  APP_PASSWORD: "your_secure_password"
+  APP_PASSWORD: "eringi39"
   DATABASE_URL: "postgresql://avnadmin:AVNS_455zs7zc8pmoX31bL14@pg-3dba9fd7-m0i3k911-5554.c.aivencloud.com:25604/defaultdb?sslmode=require"
 
 resources:
