@@ -94,6 +94,12 @@
         </select>
       </div>
       <div class="col-auto">
+        <label for="search" class="col-form-label">店舗名検索:</label>
+      </div>
+      <div class="col-auto">
+        <input type="text" name="search" id="search" class="form-control" placeholder="例: マクドナルド" value="{{ search_query }}">
+      </div>
+      <div class="col-auto">
         <label for="sort_order" class="col-form-label">日付のソート順:</label>
       </div>
       <div class="col-auto">
@@ -121,6 +127,12 @@
       </h2>
       <div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="headingOne" data-bs-parent="#dataAccordion">
         <div class="accordion-body" style="background-color: rgba(0,0,0,0.2);">
+          <!-- ボタン：すべての表示状態を解除／設定 -->
+          <button class="btn btn-custom btn-info mb-2" onclick="showAllRows()">すべて表示</button>
+          <button class="btn btn-custom btn-info mb-2" onclick="hideAllRows()">すべて非表示</button>
+          <!-- ボタン：全選択/選択解除 -->
+          <button class="btn btn-custom btn-warning mb-2" onclick="selectAllCheckboxes()">全選択</button>
+          <button class="btn btn-custom btn-warning mb-2" onclick="deselectAllCheckboxes()">選択を解除</button>
           <form method="post" action="{{ url_for('index') }}">
             <input type="hidden" name="submit_type" value="delete_selected">
             <table class="table table-dark table-hover">
@@ -132,10 +144,12 @@
                   <th>金額</th>
                   <th>タグ</th>
                   <th>詳細</th>
+                  <th>表示切替</th>
                   <th>操作</th>
                 </tr>
               </thead>
-              <tbody>
+              <!-- Added an ID to tbody for JavaScript access -->
+              <tbody id="dataTableBody">
               {% for item in data %}
                 <tr>
                   <td><input type="checkbox" name="selected_ids" value="{{ item.id }}"></td>
@@ -144,6 +158,7 @@
                   <td>{{ item.amount }}円</td>
                   <td>{{ item.tag if item.tag else "その他" }}</td>
                   <td>{{ item.details if item.details else "-" }}</td>
+                  <td><button type="button" class="btn btn-custom btn-secondary btn-sm" onclick="toggleRow(this)">切替</button></td>
                   <td>
                     <a href="{{ url_for('edit', record_id=item.id, start_date=request.args.get('start_date', ''), end_date=request.args.get('end_date', ''), year_month=request.args.get('year_month', ''), filter_tag=request.args.get('filter_tag', ''), sort_order=request.args.get('sort_order', 'asc')) }}" class="btn btn-custom btn-warning btn-sm">編集</a>
                   </td>
@@ -151,6 +166,10 @@
               {% endfor %}
               </tbody>
             </table>
+            <!-- 表示中の合計金額 -->
+            <div class="mt-2">
+              <strong>合計金額: </strong><span id="displayedTotal">{{ displayed_total }}</span>円
+            </div>
             <button type="submit" class="btn btn-custom btn-danger mt-2">選択した項目を削除</button>
           </form>
           <form method="post" action="{{ url_for('index') }}">
@@ -441,7 +460,6 @@ const stackedChart = new Chart(stackedCtx, {
 });
 
 // --- 月ごとの支出比較グラフ (monthlyComparisonChart) with Gradient ---
-// ※ チェックボックスは廃止
 const monthlyComparisonCtx = document.getElementById('monthlyComparisonChart').getContext('2d');
 const gradient = monthlyComparisonCtx.createLinearGradient(0, 0, 0, monthlyComparisonCtx.canvas.height);
 gradient.addColorStop(0, 'rgba(54, 162, 235, 0.8)');
@@ -534,7 +552,42 @@ async function handleChartClick(evt, chartObj, categoryLabel) {
   detailModal.show();
 }
 
-// --- Select All チェックボックス ---
+// --- 行表示のトグルと合計金額再計算 ---
+function recalcTotal() {
+  let total = 0;
+  const rows = document.querySelectorAll('#dataTableBody tr');
+  rows.forEach(row => {
+    if (!row.classList.contains('hidden-row')) {
+      const amountCell = row.cells[3];
+      let amtText = amountCell.innerText.replace(/円/g, '').replace(/,/g, '').trim();
+      let amt = parseInt(amtText) || 0;
+      total += amt;
+    }
+  });
+  document.getElementById('displayedTotal').innerText = total;
+}
+
+function toggleRow(btn) {
+  var row = btn.closest('tr');
+  row.classList.toggle('hidden-row');
+  recalcTotal();
+}
+
+function showAllRows() {
+  document.querySelectorAll('.hidden-row').forEach(function(row){
+    row.classList.remove('hidden-row');
+  });
+  recalcTotal();
+}
+
+function hideAllRows() {
+  document.querySelectorAll('#dataTableBody tr').forEach(function(row){
+    row.classList.add('hidden-row');
+  });
+  recalcTotal();
+}
+
+// --- チェックボックス全選択/解除 ---
 const selectAllChk = document.getElementById("selectAll");
 if(selectAllChk){
   selectAllChk.addEventListener("change", () => {
@@ -542,5 +595,21 @@ if(selectAllChk){
     boxes.forEach(cb => { cb.checked = selectAllChk.checked; });
   });
 }
+
+function selectAllCheckboxes() {
+  const checkboxes = document.querySelectorAll('input[name="selected_ids"]');
+  checkboxes.forEach(cb => { cb.checked = true; });
+}
+
+function deselectAllCheckboxes() {
+  const checkboxes = document.querySelectorAll('input[name="selected_ids"]');
+  checkboxes.forEach(cb => { cb.checked = false; });
+}
 </script>
+<style>
+  /* hidden-row クラスは行の透明度を下げる */
+  .hidden-row {
+    opacity: 0.4;
+  }
+</style>
 {% endblock body_scripts %}
