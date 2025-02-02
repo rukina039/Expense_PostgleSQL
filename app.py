@@ -4,13 +4,15 @@ import uuid
 from datetime import datetime
 from collections import defaultdict
 from functools import wraps
-from sqlalchemy import extract
-from dotenv import load_dotenv
+from sqlalchemy import extract, or_
 
 from flask import Flask, request, render_template, redirect, url_for, session, flash, jsonify
+from dotenv import load_dotenv
+
 from extensions import db
 from models import Expense
 
+# .env ファイルの読み込み
 load_dotenv()
 
 app = Flask(__name__)
@@ -103,7 +105,7 @@ def login_required(func):
 def login():
     if request.method == "POST":
         pw = request.form.get("password")
-        if pw == os.environ.get("APP_PASSWORD", "eringi39"):
+        if pw == os.environ.get("APP_PASSWORD", "pass"):
             session["logged_in"] = True
             flash("ログインしました。", "success")
             return redirect(url_for("index"))
@@ -130,17 +132,26 @@ def index():
                 tag_str = request.form.get("tag", "")
                 det_str = request.form.get("details", "")
                 if date_str and store_str and amount_str:
-                    new_expense = Expense(
-                        id=str(uuid.uuid4()),
-                        date=datetime.strptime(date_str.strip(), "%Y-%m-%d").date(),
-                        store=store_str.strip(),
-                        amount=parse_amount(amount_str),
-                        tag=automatic_tagging(store_str) if not tag_str else tag_str.strip(),
-                        details=det_str.strip()
-                    )
-                    db.session.add(new_expense)
-                    db.session.commit()
-                    flash("新規出費を追加しました。", "success")
+                    # Create a candidate new expense object
+                    candidate_date = datetime.strptime(date_str.strip(), "%Y-%m-%d").date()
+                    candidate_store = store_str.strip()
+                    candidate_amount = parse_amount(amount_str)
+                    # Check for duplicate (date, store, amount)
+                    duplicate = Expense.query.filter_by(date=candidate_date, store=candidate_store, amount=candidate_amount).first()
+                    if duplicate:
+                        flash("同じ日付・店舗・金額のデータは既に存在するため、追加されませんでした。", "error")
+                    else:
+                        new_expense = Expense(
+                            id=str(uuid.uuid4()),
+                            date=candidate_date,
+                            store=candidate_store,
+                            amount=candidate_amount,
+                            tag=automatic_tagging(store_str) if not tag_str else tag_str.strip(),
+                            details=det_str.strip()
+                        )
+                        db.session.add(new_expense)
+                        db.session.commit()
+                        flash("新規出費を追加しました。", "success")
             elif submit_type == "add_paste":
                 paste_data = request.form.get("paste_data", "")
                 if paste_data:
@@ -161,11 +172,18 @@ def index():
                             except:
                                 idx += 5
                                 continue
+                            candidate_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                            candidate_store = store_line.strip()
+                            candidate_amount = parse_amount(amt_line)
+                            duplicate = Expense.query.filter_by(date=candidate_date, store=candidate_store, amount=candidate_amount).first()
+                            if duplicate:
+                                idx += 5
+                                continue  # skip duplicate
                             new_expense = Expense(
                                 id=str(uuid.uuid4()),
-                                date=datetime.strptime(date_str, "%Y-%m-%d").date(),
-                                store=store_line,
-                                amount=parse_amount(amt_line),
+                                date=candidate_date,
+                                store=candidate_store,
+                                amount=candidate_amount,
                                 tag=automatic_tagging(store_line),
                                 details=""
                             )
@@ -195,7 +213,6 @@ def index():
         # フィルター処理
         # ---------------------
         query = Expense.query
-        # 年月フィルター（"YYYY-MM" の形式）
         yymm = request.args.get("year_month", "")
         if yymm:
             try:
@@ -224,6 +241,16 @@ def index():
         if f_tag:
             query = query.filter(Expense.tag == f_tag)
 
+        # --- 新たに追加：店舗名および詳細検索（部分一致） ---
+        search_query = request.args.get("search", "").strip()
+        if search_query:
+            query = query.filter(
+                or_(
+                    Expense.store.ilike(f"%{search_query}%"),
+                    Expense.details.ilike(f"%{search_query}%")
+                )
+            )
+
         sort_order = request.args.get("sort_order", "asc").strip().lower()
         if sort_order == "desc":
             query = query.order_by(Expense.date.desc())
@@ -231,6 +258,9 @@ def index():
             query = query.order_by(Expense.date.asc())
 
         expenses = query.all()
+
+        # 表示中の合計金額を計算
+        displayed_total = sum(exp.amount for exp in expenses)
 
         # 集計用データ作成
         overall_line = defaultdict(int)
@@ -276,7 +306,6 @@ def index():
                 "pointHoverRadius": 5
             })
 
-        # 月ごとの支出比較グラフ用（全体集計）
         monthly_data = overall_line
 
         # カテゴリー内訳集計（ドーナツチャート用）
@@ -299,7 +328,9 @@ def index():
             current_sort_order=sort_order,
             monthly_data=monthly_data,
             category_totals_labels=tags_sorted,
-            category_totals_data=category_totals_data
+            category_totals_data=category_totals_data,
+            displayed_total=displayed_total,
+            search_query=search_query
         )
     except Exception as e:
         flash(f"エラーが発生しました: {str(e)}", "error")
