@@ -105,7 +105,7 @@ def login_required(func):
 def login():
     if request.method == "POST":
         pw = request.form.get("password")
-        if pw == os.environ.get("APP_PASSWORD", "pass"):
+        if pw == os.environ.get("APP_PASSWORD", "eringi39"):
             session["logged_in"] = True
             flash("ログインしました。", "success")
             return redirect(url_for("index"))
