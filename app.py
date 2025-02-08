@@ -5,22 +5,25 @@ from datetime import datetime
 from collections import defaultdict
 from functools import wraps
 from sqlalchemy import extract, or_
-
-from flask import Flask, request, render_template, redirect, url_for, session, flash, jsonify
+import csv
+from io import StringIO
+from flask import Flask, request, render_template, redirect, url_for, session, flash, jsonify, Response, make_response
 from dotenv import load_dotenv
+import pdfkit  # Make sure wkhtmltopdf is installed
 
 from extensions import db
 from models import Expense
 
-# .env ファイルの読み込み
+# Load .env file
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "YOUR_SECURE_SECRET_KEY")
 
-# PostgreSQL の接続情報（DATABASE_URL 環境変数から取得）
+# PostgreSQL connection info (from DATABASE_URL environment variable)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-    "DATABASE_URL", "postgresql://avnadmin:AVNS_455zs7zc8pmoX31bL14@pg-3dba9fd7-m0i3k911-5554.c.aivencloud.com:25604/defaultdb?sslmode=require"
+    "DATABASE_URL",
+    "postgresql://avnadmin:AVNS_455zs7zc8pmoX31bL14@pg-3dba9fd7-m0i3k911-5554.c.aivencloud.com:25604/defaultdb?sslmode=require"
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -28,7 +31,7 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
-# タグ自動分類用マッピング
+# Tag auto-classification mapping
 TAG_MAPPING = [
     ("amazon", "Amazon"),
     ("ピアゴ", "食費"),
@@ -77,7 +80,7 @@ TAG_MAPPING = [
 ]
 
 def parse_amount(amount_str):
-    """例: '1,500円' や '100.99円' を整数（円単位）に変換（小数点以下は切り捨て）"""
+    """Convert strings like '1,500円' or '100.99円' to integer yen (truncates decimals)."""
     cleaned = amount_str.replace("円", "").replace(",", "").strip()
     try:
         return int(float(cleaned))
@@ -85,7 +88,7 @@ def parse_amount(amount_str):
         return 0
 
 def automatic_tagging(store_name):
-    """店舗名から自動的にタグを返す（マッピングに一致しなければ 'その他'）"""
+    """Return an automatic tag from store name. Returns 'その他' if no match."""
     lower = store_name.lower()
     for kw, tg in TAG_MAPPING:
         if kw.lower() in lower:
@@ -132,11 +135,9 @@ def index():
                 tag_str = request.form.get("tag", "")
                 det_str = request.form.get("details", "")
                 if date_str and store_str and amount_str:
-                    # Create a candidate new expense object
                     candidate_date = datetime.strptime(date_str.strip(), "%Y-%m-%d").date()
                     candidate_store = store_str.strip()
                     candidate_amount = parse_amount(amount_str)
-                    # Check for duplicate (date, store, amount)
                     duplicate = Expense.query.filter_by(date=candidate_date, store=candidate_store, amount=candidate_amount).first()
                     if duplicate:
                         flash("同じ日付・店舗・金額のデータは既に存在するため、追加されませんでした。", "error")
@@ -178,7 +179,7 @@ def index():
                             duplicate = Expense.query.filter_by(date=candidate_date, store=candidate_store, amount=candidate_amount).first()
                             if duplicate:
                                 idx += 5
-                                continue  # skip duplicate
+                                continue
                             new_expense = Expense(
                                 id=str(uuid.uuid4()),
                                 date=candidate_date,
@@ -210,7 +211,7 @@ def index():
                 db.session.commit()
                 flash("すべてのデータを削除しました。", "success")
         # ---------------------
-        # フィルター処理
+        # Filter processing
         # ---------------------
         query = Expense.query
         yymm = request.args.get("year_month", "")
@@ -241,7 +242,7 @@ def index():
         if f_tag:
             query = query.filter(Expense.tag == f_tag)
 
-        # --- 新たに追加：店舗名および詳細検索（部分一致） ---
+        # Additional: partial match search for store and details
         search_query = request.args.get("search", "").strip()
         if search_query:
             query = query.filter(
@@ -259,10 +260,10 @@ def index():
 
         expenses = query.all()
 
-        # 表示中の合計金額を計算
+        # Calculate displayed total amount
         displayed_total = sum(exp.amount for exp in expenses)
 
-        # 集計用データ作成
+        # Data aggregation for charts
         overall_line = defaultdict(int)
         for exp in expenses:
             ym = exp.date.strftime("%Y-%m")
@@ -271,7 +272,6 @@ def index():
         all_months_sorted = sorted(overall_line.keys())
         overall_dataset = [overall_line[m] for m in all_months_sorted]
 
-        # タグ別データ集計
         cat_data = defaultdict(lambda: defaultdict(int))
         for exp in expenses:
             ym = exp.date.strftime("%Y-%m")
@@ -283,7 +283,6 @@ def index():
 
         latest_month = all_months_sorted[-1] if all_months_sorted else ""
 
-        # スタックチャート用データ
         stacked_datasets = []
         color_palette = [
             'rgba(54,162,235,0.7)', 'rgba(255,206,86,0.7)',
@@ -308,7 +307,6 @@ def index():
 
         monthly_data = overall_line
 
-        # カテゴリー内訳集計（ドーナツチャート用）
         category_totals = defaultdict(int)
         for exp in expenses:
             category_totals[exp.tag or "その他"] += exp.amount
@@ -419,9 +417,10 @@ def plot_detail():
         if not selected_month:
             return jsonify({"error": "月が指定されていません"}), 400
 
-        # 年月フィルター：selected_month は "YYYY-MM" 形式
-        query = Expense.query.filter(extract('year', Expense.date) == int(selected_month.split("-")[0]),
-                                       extract('month', Expense.date) == int(selected_month.split("-")[1]))
+        query = Expense.query.filter(
+            extract('year', Expense.date) == int(selected_month.split("-")[0]),
+            extract('month', Expense.date) == int(selected_month.split("-")[1])
+        )
 
         if selected_tag != "Overall":
             query = query.filter(Expense.tag == selected_tag)
@@ -441,6 +440,52 @@ def plot_detail():
         return jsonify({"detail": result_list})
     except Exception as e:
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
+
+# --- New Export Endpoints ---
+
+@app.route("/export/csv")
+@login_required
+def export_csv():
+    ids = request.args.get("ids")
+    if ids:
+        id_list = ids.split(",")
+        expenses = Expense.query.filter(Expense.id.in_(id_list)).order_by(Expense.date.asc()).all()
+    else:
+        expenses = Expense.query.all()
+
+    si = StringIO()
+    writer = csv.writer(si)
+    writer.writerow(["日付", "店舗", "金額", "タグ", "詳細"])
+    for exp in expenses:
+        writer.writerow([exp.date.strftime("%Y-%m-%d"), exp.store, exp.amount, exp.tag, exp.details])
+    output = si.getvalue()
+
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=expenses.csv"}
+    )
+
+@app.route("/export/pdf")
+@login_required
+def export_pdf():
+    ids = request.args.get("ids")
+    if ids:
+        id_list = ids.split(",")
+        expenses = Expense.query.filter(Expense.id.in_(id_list)).order_by(Expense.date.asc()).all()
+    else:
+        expenses = Expense.query.all()
+
+    rendered = render_template("export_pdf.html", expenses=expenses)
+    # Configure pdfkit with the wkhtmltopdf path
+    wkhtmltopdf_path = "C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+    config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
+    pdf = pdfkit.from_string(rendered, False, configuration=config)
+
+    response = make_response(pdf)
+    response.headers["Content-Type"] = "application/pdf"
+    response.headers["Content-Disposition"] = "attachment; filename=expenses.pdf"
+    return response
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
