@@ -4,3 +4,4 @@ gunicorn==20.1.0
 filelock==3.12.0
 psycopg2-binary==2.9.6
 python-dotenv
+pdfkit==1.0.0
