@@ -9,21 +9,20 @@ import csv
 from io import StringIO
 from flask import Flask, request, render_template, redirect, url_for, session, flash, jsonify, Response, make_response
 from dotenv import load_dotenv
-import pdfkit  # Make sure wkhtmltopdf is installed
+import pdfkit  # Ensure pdfkit is installed and wkhtmltopdf is available on your system
 
 from extensions import db
 from models import Expense
 
-# Load .env file
+# .env ファイルの読み込み
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "YOUR_SECURE_SECRET_KEY")
 
-# PostgreSQL connection info (from DATABASE_URL environment variable)
+# PostgreSQL の接続情報（DATABASE_URL 環境変数から取得）
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://avnadmin:AVNS_455zs7zc8pmoX31bL14@pg-3dba9fd7-m0i3k911-5554.c.aivencloud.com:25604/defaultdb?sslmode=require"
+    "DATABASE_URL", "postgresql://avnadmin:AVNS_455zs7zc8pmoX31bL14@pg-3dba9fd7-m0i3k911-5554.c.aivencloud.com:25604/defaultdb?sslmode=require"
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -31,7 +30,7 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
-# Tag auto-classification mapping
+# タグ自動分類用マッピング
 TAG_MAPPING = [
     ("amazon", "Amazon"),
     ("ピアゴ", "食費"),
@@ -80,7 +79,7 @@ TAG_MAPPING = [
 ]
 
 def parse_amount(amount_str):
-    """Convert strings like '1,500円' or '100.99円' to integer yen (truncates decimals)."""
+    """例: '1,500円' や '100.99円' を整数（円単位）に変換（小数点以下は切り捨て）"""
     cleaned = amount_str.replace("円", "").replace(",", "").strip()
     try:
         return int(float(cleaned))
@@ -88,7 +87,7 @@ def parse_amount(amount_str):
         return 0
 
 def automatic_tagging(store_name):
-    """Return an automatic tag from store name. Returns 'その他' if no match."""
+    """店舗名から自動的にタグを返す（マッピングに一致しなければ 'その他'）"""
     lower = store_name.lower()
     for kw, tg in TAG_MAPPING:
         if kw.lower() in lower:
@@ -211,7 +210,7 @@ def index():
                 db.session.commit()
                 flash("すべてのデータを削除しました。", "success")
         # ---------------------
-        # Filter processing
+        # フィルター処理
         # ---------------------
         query = Expense.query
         yymm = request.args.get("year_month", "")
@@ -242,7 +241,6 @@ def index():
         if f_tag:
             query = query.filter(Expense.tag == f_tag)
 
-        # Partial match search for store and details
         search_query = request.args.get("search", "").strip()
         if search_query:
             query = query.filter(
@@ -259,11 +257,8 @@ def index():
             query = query.order_by(Expense.date.asc())
 
         expenses = query.all()
-
-        # Calculate displayed total amount
         displayed_total = sum(exp.amount for exp in expenses)
 
-        # Data aggregation for charts
         overall_line = defaultdict(int)
         for exp in expenses:
             ym = exp.date.strftime("%Y-%m")
@@ -282,7 +277,6 @@ def index():
             cat_charts[cat] = [cat_data[cat].get(m, 0) for m in all_months_sorted]
 
         latest_month = all_months_sorted[-1] if all_months_sorted else ""
-
         stacked_datasets = []
         color_palette = [
             'rgba(54,162,235,0.7)', 'rgba(255,206,86,0.7)',
@@ -306,7 +300,6 @@ def index():
             })
 
         monthly_data = overall_line
-
         category_totals = defaultdict(int)
         for exp in expenses:
             category_totals[exp.tag or "その他"] += exp.amount
@@ -417,10 +410,8 @@ def plot_detail():
         if not selected_month:
             return jsonify({"error": "月が指定されていません"}), 400
 
-        query = Expense.query.filter(
-            extract('year', Expense.date) == int(selected_month.split("-")[0]),
-            extract('month', Expense.date) == int(selected_month.split("-")[1])
-        )
+        query = Expense.query.filter(extract('year', Expense.date) == int(selected_month.split("-")[0]),
+                                       extract('month', Expense.date) == int(selected_month.split("-")[1]))
 
         if selected_tag != "Overall":
             query = query.filter(Expense.tag == selected_tag)
@@ -453,11 +444,17 @@ def export_csv():
     else:
         expenses = Expense.query.all()
 
+    # 合計金額の算出（表示中のデータ全体の合計）
+    total = sum(exp.amount for exp in expenses)
+
     si = StringIO()
     writer = csv.writer(si)
     writer.writerow(["日付", "店舗", "金額", "タグ", "詳細"])
     for exp in expenses:
         writer.writerow([exp.date.strftime("%Y-%m-%d"), exp.store, exp.amount, exp.tag, exp.details])
+    # 空行を入れてから、合計金額の行を追加する
+    writer.writerow([])
+    writer.writerow(["合計金額", "", total, "", ""])
     output = si.getvalue()
 
     return Response(
@@ -477,13 +474,7 @@ def export_pdf():
         expenses = Expense.query.all()
 
     rendered = render_template("export_pdf.html", expenses=expenses)
-    # Configure pdfkit with the wkhtmltopdf path.
-    # IMPORTANT: If you are on Windows, ensure your path is properly escaped or use a raw string.
-    # For example:
-    # wkhtmltopdf_path = r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
-    wkhtmltopdf_path = os.environ.get('WKHTMLTOPDF_PATH', '/usr/local/bin/wkhtmltopdf')
-    config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
-    pdf = pdfkit.from_string(rendered, False, configuration=config)
+    pdf = pdfkit.from_string(rendered, False)
 
     response = make_response(pdf)
     response.headers["Content-Type"] = "application/pdf"
@@ -493,5 +484,3 @@ def export_pdf():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
-
-
