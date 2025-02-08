@@ -242,7 +242,7 @@ def index():
         if f_tag:
             query = query.filter(Expense.tag == f_tag)
 
-        # Additional: partial match search for store and details
+        # Partial match search for store and details
         search_query = request.args.get("search", "").strip()
         if search_query:
             query = query.filter(
@@ -477,8 +477,11 @@ def export_pdf():
         expenses = Expense.query.all()
 
     rendered = render_template("export_pdf.html", expenses=expenses)
-    # Configure pdfkit with the wkhtmltopdf path
-    wkhtmltopdf_path = "C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+    # Configure pdfkit with the wkhtmltopdf path.
+    # IMPORTANT: If you are on Windows, ensure your path is properly escaped or use a raw string.
+    # For example:
+    # wkhtmltopdf_path = r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+    wkhtmltopdf_path = os.environ.get('WKHTMLTOPDF_PATH', '/usr/local/bin/wkhtmltopdf')
     config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
     pdf = pdfkit.from_string(rendered, False, configuration=config)
 
@@ -490,3 +493,5 @@ def export_pdf():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
+
+
