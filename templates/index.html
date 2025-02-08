@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container">
-  <!-- Header -->
+  <!-- ヘッダー -->
   <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
     <h1>Household Budget Dashboard</h1>
     <div class="mb-2">
@@ -13,30 +13,30 @@
     </div>
   </div>
   
-  <!-- Dashboard Charts -->
+  <!-- ダッシュボードチャート -->
   <div class="row">
-    <!-- Overall Expenses Chart -->
+    <!-- 全体の出費グラフ -->
     <div class="col-lg-6 col-md-12 mb-4">
       <div class="frosted-glass p-3" style="height: 400px;">
         <h5 class="text-center">Monthly All Expenses</h5>
         <canvas id="overallLine" style="width:100%; height:100%;"></canvas>
       </div>
     </div>
-    <!-- Tagged Expenses Chart with Zoom/Pan -->
+    <!-- タグ別月別出費グラフ（ズーム・パン付き） -->
     <div class="col-lg-6 col-md-12 mb-4">
       <div class="frosted-glass p-3" style="height: 400px;">
         <h5 class="text-center">Tagged Monthly Expenditures</h5>
         <canvas id="combinedLineChart" style="width:100%; height:100%;"></canvas>
       </div>
     </div>
-    <!-- Stacked Chart with Zoom/Pan -->
+    <!-- スタックチャート（ズーム・パン付き） -->
     <div class="col-lg-6 col-md-12 mb-4">
       <div class="frosted-glass p-3" style="height: 400px;">
         <h5 class="text-center">Stacked Tag Chart</h5>
         <canvas id="stackedChart" style="width:100%; height:100%;"></canvas>
       </div>
     </div>
-    <!-- Category Breakdown Doughnut Chart -->
+    <!-- カテゴリー内訳ドーナツチャート -->
     <div class="col-lg-6 col-md-12 mb-4">
       <div class="frosted-glass p-3" style="height: 400px;">
         <h5 class="text-center">Category Breakdown</h5>
@@ -45,7 +45,7 @@
     </div>
   </div>
 
-  <!-- Monthly Comparison Chart -->
+  <!-- 月ごとの支出比較グラフ -->
   <div class="row my-4">
     <div class="col-12">
       <div class="frosted-glass p-3">
@@ -55,7 +55,7 @@
     </div>
   </div>
 
-  <!-- Filter Form -->
+  <!-- フィルターフォーム -->
   <div class="frosted-glass p-3 mb-4">
     <h4>フィルター</h4>
     <form method="get" class="row g-3 align-items-center filter-form">
@@ -123,7 +123,7 @@
     </form>
   </div>
 
-  <!-- Registered Data List (Accordion) -->
+  <!-- 登録データ一覧（アコーディオン） -->
   <div class="accordion mb-4" id="dataAccordion">
     <div class="accordion-item" style="background-color: rgba(0,0,0,0.3); border: none;">
       <h2 class="accordion-header" id="headingOne">
@@ -133,7 +133,7 @@
       </h2>
       <div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="headingOne" data-bs-parent="#dataAccordion">
         <div class="accordion-body" style="background-color: rgba(0,0,0,0.2);">
-          <!-- Button to restore hidden rows -->
+          <!-- ボタン：全ての非表示状態を解除 -->
           <button class="btn btn-custom btn-info mb-2" onclick="showAllRows()">すべて表示</button>
           <form method="post" action="{{ url_for('index') }}">
             <input type="hidden" name="submit_type" value="delete_selected">
@@ -152,7 +152,8 @@
               </thead>
               <tbody>
               {% for item in data %}
-                <tr id="row-{{ item.id }}" data-record-id="{{ item.id }}">
+                <!-- Note the added data-amount attribute -->
+                <tr id="row-{{ item.id }}" data-record-id="{{ item.id }}" data-amount="{{ item.amount }}">
                   <td><input type="checkbox" name="selected_ids" value="{{ item.id }}"></td>
                   <td>{{ item.date }}</td>
                   <td>{{ item.store }}</td>
@@ -167,8 +168,8 @@
               {% endfor %}
               </tbody>
             </table>
-            <!-- Displayed Total -->
-            <div class="mt-2">
+            <!-- Total displayed here; updated dynamically -->
+            <div id="visibleTotal" class="mt-2">
               <strong>合計金額: </strong>{{ displayed_total }}円
             </div>
             <button type="submit" class="btn btn-custom btn-danger mt-2">選択した項目を削除</button>
@@ -182,7 +183,7 @@
     </div>
   </div>
 
-  <!-- Modal: Detail Display -->
+  <!-- 円グラフ詳細表示用モーダル -->
   <div class="modal fade" id="detailModal" tabindex="-1" aria-labelledby="detailModalLabel" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content frosted-glass">
@@ -197,7 +198,7 @@
   </div>
 </div>
 
-<!-- Modal: New Entry (Manual) -->
+<!-- モーダル: 新規入力（手動） -->
 <div class="modal fade" id="newEntryModal" tabindex="-1" aria-labelledby="newEntryModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content frosted-glass" style="color: inherit;">
@@ -244,7 +245,7 @@
   </div>
 </div>
 
-<!-- Modal: New Entry (Paste) -->
+<!-- モーダル: 新規入力（ペースト） -->
 <div class="modal fade" id="pasteEntryModal" tabindex="-1" aria-labelledby="pasteEntryModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content frosted-glass" style="color: inherit;">
@@ -275,7 +276,7 @@
 
 {% block body_scripts %}
 <script>
-// Global variables from backend
+// --- グローバル変数（バックエンドから渡されたデータ） ---
 const allMonths = {{ all_months | tojson }};
 const overallDataset = {{ overall_dataset | tojson }};
 const catCharts = {{ cat_charts | tojson }};
@@ -286,7 +287,7 @@ const monthlyData = {{ monthly_data | tojson }};
 const categoryTotalsLabels = {{ category_totals_labels | tojson }};
 const categoryTotalsData = {{ category_totals_data | tojson }};
 
-// Overall Expenses Chart
+// --- 全体の出費グラフ (overallLine) ---
 const overallCtx = document.getElementById('overallLine').getContext('2d');
 const overallChart = new Chart(overallCtx, {
   type: 'line',
@@ -340,7 +341,7 @@ const overallChart = new Chart(overallCtx, {
   }
 });
 
-// Tagged Expenses Chart with Zoom
+// --- タグ別月別出費グラフ (combinedLineChart) with Zoom ---
 const colorPalette = [
   'rgba(54,162,235,1)', 'rgba(255,206,86,1)', 'rgba(75,192,192,1)',
   'rgba(153,102,255,1)', 'rgba(255,159,64,1)', 'rgba(255,99,132,1)',
@@ -408,7 +409,7 @@ const combinedChart = new Chart(combinedCtx, {
   }
 });
 
-// Stacked Chart with Zoom
+// --- スタックチャート (stackedChart) with Zoom ---
 const stackedCtx = document.getElementById('stackedChart').getContext('2d');
 const stackedChart = new Chart(stackedCtx, {
   type: 'line',
@@ -460,7 +461,7 @@ const stackedChart = new Chart(stackedCtx, {
   }
 });
 
-// Monthly Comparison Chart with Gradient
+// --- 月ごとの支出比較グラフ (monthlyComparisonChart) with Gradient ---
 const monthlyComparisonCtx = document.getElementById('monthlyComparisonChart').getContext('2d');
 const gradient = monthlyComparisonCtx.createLinearGradient(0, 0, 0, monthlyComparisonCtx.canvas.height);
 gradient.addColorStop(0, 'rgba(54, 162, 235, 0.8)');
@@ -491,7 +492,7 @@ let monthlyComparisonChart = new Chart(monthlyComparisonCtx, {
   }
 });
 
-// Category Breakdown Doughnut Chart
+// --- カテゴリー内訳ドーナツチャート ---
 const categoryDonutCtx = document.getElementById('categoryDonutChart').getContext('2d');
 const categoryDonutChart = new Chart(categoryDonutCtx, {
   type: 'doughnut',
@@ -517,7 +518,7 @@ const categoryDonutChart = new Chart(categoryDonutCtx, {
   }
 });
 
-// Detail modal on chart click
+// --- 円グラフクリック時詳細表示（モーダル） ---
 async function handleChartClick(evt, chartObj, categoryLabel) {
   const points = chartObj.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
   if (!points.length) return;
@@ -553,7 +554,7 @@ async function handleChartClick(evt, chartObj, categoryLabel) {
   detailModal.show();
 }
 
-// Select All checkbox
+// --- Select All チェックボックス ---
 const selectAllChk = document.getElementById("selectAll");
 if(selectAllChk){
   selectAllChk.addEventListener("change", () => {
@@ -562,18 +563,21 @@ if(selectAllChk){
   });
 }
 
-// Toggle row visibility
+// --- 個別行の表示切替 ---
 function toggleRow(btn) {
   var row = btn.closest('tr');
   row.classList.toggle('hidden-row');
+  recalcVisibleTotal();
 }
+// すべての行の "hidden-row" クラスを除去する
 function showAllRows() {
   document.querySelectorAll('.hidden-row').forEach(function(row){
     row.classList.remove('hidden-row');
   });
+  recalcVisibleTotal();
 }
 
-// Export function: gather visible record IDs and redirect to export endpoint
+// --- Export Function ---
 function exportData(type) {
   var table = document.getElementById("expensesTable");
   var rows = table.getElementsByTagName("tr");
@@ -590,6 +594,24 @@ function exportData(type) {
   var idsParam = visibleIds.join(",");
   var url = "/export/" + type + "?ids=" + encodeURIComponent(idsParam);
   window.location.href = url;
+}
+
+// --- Recalculate Visible Total ---
+// This function sums the data-amount attributes of all non-hidden rows.
+function recalcVisibleTotal() {
+  var table = document.getElementById("expensesTable");
+  var rows = table.getElementsByTagName("tr");
+  var sum = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (!row.classList.contains("hidden-row")) {
+      var amt = row.getAttribute("data-amount");
+      if (amt) {
+        sum += parseInt(amt);
+      }
+    }
+  }
+  document.getElementById("visibleTotal").innerText = "合計金額: " + sum + "円";
 }
 </script>
 <style>
